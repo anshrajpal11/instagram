@@ -1,6 +1,9 @@
 import { User } from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import getDataUri from "../utils/dataUri.js";
+import cloudinary from "../utils/cloudinary.js";
+
 export const register = async (req, res) => {
   try {
     const { email, username, password } = req.body;
@@ -118,8 +121,85 @@ export const editProfile = async(req,res)=>{
   try {
     const userId = req.id;
     const {bio,gender} = req.body;
-    const profilePicture = req.files
+    const profilePicture = req.files;
+    let cloudResponse;
+    const user = await user.findById(userId);
+    if(profilePicture){
+      const fileUri = getDataUri(profilePicture);
+      cloudResponse = await cloudinary.uploader.upload(fileUri);
+    }
+
+    if(bio){
+      user.bio=bio;
+    }
+    if(gender){
+      user.gender=gender;
+    }
+    if(profilePicture){
+      user.profilePicture = cloudResponse.secure_url;
+    }
+
+    await user.save();
+
+
   } catch (error) {
     console.log(error);
   }
 }
+
+
+export const getSuggestedUsers = async(req,res)=>{
+  try {
+    const suggestedUsers = await User.find({_id:{$ne:req.id}}).select("-password");
+    if(!suggestedUsers){
+      return res.status(400).json({
+        message:"Currently do not have any users"
+      })
+    }
+    return res.status(400).json({
+      users:suggestedUsers
+    })
+  } catch (error) {
+    
+  } 
+}
+
+
+export const followUnfollow = async (req, res) => {
+  try {
+    const userId = req.id;
+    const othersId = req.params.id;
+
+    if (userId === othersId) {
+      return res.status(400).json({ message: "You can't follow/unfollow yourself" });
+    }
+
+    const user = await User.findById(userId);
+    const otherUser = await User.findById(othersId);
+
+    if (!user || !otherUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isFollowing = user.following.includes(othersId);
+
+    if (isFollowing) {
+     
+      user.following = user.following.filter(id => id.toString() !== othersId);
+      otherUser.followers = otherUser.followers.filter(id => id.toString() !== userId);
+    } else {
+      
+      user.following.push(othersId);
+      otherUser.followers.push(userId);
+    }
+
+    await user.save();
+    await otherUser.save();
+
+    return res.status(200).json({
+      message: isFollowing ? "Unfollowed successfully" : "Followed successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Internal server error", error });
+  }
+};
