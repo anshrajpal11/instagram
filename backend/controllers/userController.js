@@ -117,36 +117,42 @@ export const getProfile = async(req,res)=>{
   }
 }
 
-export const editProfile = async(req,res)=>{
+export const editProfile = async (req, res) => {
   try {
     const userId = req.id;
-    const {bio,gender} = req.body;
-    const profilePicture = req.files;
-    let cloudResponse;
-    const user = await user.findById(userId);
-    if(profilePicture){
-      const fileUri = getDataUri(profilePicture);
-      cloudResponse = await cloudinary.uploader.upload(fileUri);
+    const { bio, gender } = req.body;
+    const profilePicture = req.file;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found", success: false });
     }
 
-    if(bio){
-      user.bio=bio;
-    }
-    if(gender){
-      user.gender=gender;
-    }
-    if(profilePicture){
-      user.profilePicture = cloudResponse.secure_url;
+    if (bio) user.bio = bio;
+    if (gender) user.gender = gender;
+
+    if (profilePicture) {
+      const fileUri = getDataUri(profilePicture);
+      try {
+        const cloudResponse = await cloudinary.uploader.upload(fileUri);
+        user.profilePicture = cloudResponse.secure_url;
+      } catch (uploadError) {
+        return res.status(500).json({ message: "Profile picture upload failed", success: false });
+      }
     }
 
     await user.save();
 
-
+    return res.status(200).json({
+      message: "Profile updated successfully",
+      success: true,
+      user,
+    });
   } catch (error) {
     console.log(error);
+    return res.status(500).json({ message: "Internal server error", success: false });
   }
-}
-
+};
 
 export const getSuggestedUsers = async(req,res)=>{
   try {
